@@ -1,0 +1,327 @@
+package org.clockworx.werewolf;
+
+import java.util.logging.Level;
+
+import org.bukkit.plugin.java.JavaPlugin;
+import org.clockworx.werewolf.config.WerewolfConfig;
+import org.clockworx.werewolf.database.DatabaseManager;
+import org.clockworx.werewolf.integration.VampireIntegration;
+import org.clockworx.werewolf.manager.SkinManager;
+import org.clockworx.werewolf.manager.WerewolfManager;
+
+/**
+ * Main plugin class for the Werewolf plugin.
+ * This class serves as the entry point and central manager for the plugin.
+ */
+public final class WerewolfPlugin extends JavaPlugin {
+
+    private static WerewolfPlugin plugin;
+    private regalowl.simpledatalib.SimpleDataLib sdl;
+    private WerewolfConfig config;
+    private DatabaseManager databaseManager;
+    private WerewolfManager werewolfManager;
+    private SkinManager skinManager;
+    private VampireIntegration vampireIntegration;
+
+    @Override
+    public void onEnable() {
+        plugin = this; // Assign in onEnable
+
+        // --- Initialize SimpleDataLib ---
+        // Initialize SimpleDataLib early for error logging and file utilities
+        try {
+            sdl = new regalowl.simpledatalib.SimpleDataLib("Werewolf");
+            sdl.setPlugin(this); // Enable Bukkit integration
+            sdl.initialize();
+            getLogger().info("SimpleDataLib initialized successfully.");
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "Failed to initialize SimpleDataLib. Continuing without it.", e);
+            sdl = null; // Set to null if initialization fails
+        }
+
+        // --- Configuration ---
+        // Load configurations first
+        if (!initializeConfigs()) { // Method returns false on success, true on failure
+            getLogger().severe("Failed to initialize configurations. Disabling plugin.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        // --- Database Migrations ---
+        // Run Flyway migrations BEFORE initializing DatabaseManager
+        if (!runDatabaseMigrations()) {
+            getLogger().severe("Database migration failed. Disabling plugin.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        // --- Initialize Database Manager ---
+        initializeDatabaseManager();
+
+        // --- Check for Vampire Plugin ---
+        checkVampirePlugin();
+
+        // --- Initialize Core Components ---
+        initializeManagers();
+        registerCommands();
+        registerListeners();
+        
+        // --- Load existing werewolf data ---
+        werewolfManager.loadWerewolves();
+        
+        // --- Initialize API ---
+        org.clockworx.werewolf.api.WerewolfAPI.initialize(this);
+
+        getLogger().info("Werewolf plugin enabled successfully!");
+    }
+
+    @Override
+    public void onDisable() {
+        // Save data on disable
+        if (werewolfManager != null) {
+            try {
+                werewolfManager.shutdown();
+            } catch (Exception e) {
+                getLogger().log(Level.SEVERE, "Error during WerewolfManager shutdown in onDisable", e);
+            }
+        }
+
+        // Shutdown database resources
+        if (databaseManager != null) {
+            try {
+                databaseManager.shutdown();
+            } catch (Exception e) {
+                getLogger().log(Level.SEVERE, "Error during DatabaseManager shutdown in onDisable", e);
+            }
+        }
+        
+        // Shutdown Hibernate SessionFactory
+        try {
+            org.clockworx.werewolf.database.HibernateConfig.shutdown();
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "Error during HibernateConfig shutdown in onDisable", e);
+        }
+
+        // Shutdown SimpleDataLib
+        if (sdl != null) {
+            try {
+                sdl.shutDown();
+            } catch (Exception e) {
+                getLogger().log(Level.SEVERE, "Error during SimpleDataLib shutdown", e);
+            }
+        }
+
+        getLogger().info("Werewolf plugin disabled!");
+    }
+
+    /**
+     * Initialize configurations.
+     * @return false if initialization succeeds, true otherwise (inverted for caller convenience).
+     */
+    private boolean initializeConfigs() {
+        try {
+            config = new WerewolfConfig(this);
+            getLogger().info("Configurations initialized!");
+            return false; // Indicate success (inverted: false = success)
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "Error initializing configurations", e);
+            return true; // Indicate failure (inverted: true = failure)
+        }
+    }
+
+    /**
+     * Executes database migrations using Flyway.
+     * @return true if migrations were successful, false otherwise.
+     */
+    private boolean runDatabaseMigrations() {
+        getLogger().info("Starting database migration check...");
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+        try {
+            // Set context class loader for Flyway to find drivers/resources
+            Thread.currentThread().setContextClassLoader(getClassLoader());
+
+            // Get database details from loaded config
+            String dbType = config.getDatabaseType();
+            String dbUrl = config.getDatabaseUrl();
+            String dbUser = config.getDatabaseUser();
+            String dbPassword = config.getDatabasePassword();
+            String tablePrefix = config.getDatabaseTablePrefix();
+
+            // Load the appropriate JDBC driver explicitly
+            try {
+                if ("mysql".equalsIgnoreCase(dbType)) {
+                    Class.forName("com.mysql.cj.jdbc.Driver", true, getClassLoader());
+                } else if ("sqlite".equalsIgnoreCase(dbType)) {
+                    Class.forName("org.sqlite.JDBC", true, getClassLoader());
+                } else if ("postgres".equalsIgnoreCase(dbType) || "postgresql".equalsIgnoreCase(dbType)) {
+                    Class.forName("org.postgresql.Driver", true, getClassLoader());
+                }
+            } catch (ClassNotFoundException e) {
+                getLogger().log(Level.SEVERE, "Could not find JDBC driver for database type: " + dbType, e);
+                return false;
+            }
+
+            org.flywaydb.core.api.configuration.FluentConfiguration flywayConfig = 
+                org.flywaydb.core.Flyway.configure(getClassLoader())
+                    .dataSource(dbUrl, dbUser, dbPassword)
+                    .locations("classpath:db/migration")
+                    .encoding("UTF-8")
+                    .baselineOnMigrate(true)
+                    .baselineVersion("0")
+                    .placeholders(java.util.Map.of("tablePrefix", tablePrefix));
+
+            // Set the schema history table name with the prefix
+            String historyTableName = tablePrefix.isEmpty() 
+                ? "flyway_schema_history" 
+                : tablePrefix + "flyway_schema_history";
+            flywayConfig.table(historyTableName);
+            getLogger().info("Using Flyway history table: " + historyTableName);
+
+            org.flywaydb.core.Flyway flyway = flywayConfig.load();
+            flyway.migrate();
+
+            getLogger().info("Database migration check completed successfully.");
+            return true; // Success
+        } catch (org.flywaydb.core.api.FlywayException e) {
+            getLogger().log(Level.SEVERE, "Database migration failed!", e);
+            if (e.getCause() != null) {
+                getLogger().log(Level.SEVERE, "Cause: " + e.getCause().getMessage(), e.getCause());
+            }
+            return false; // Failure
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "An unexpected error occurred during database migration setup!", e);
+            return false; // Failure
+        } finally {
+            // Restore original class loader
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+        }
+    }
+
+    /**
+     * Initialize database manager instance.
+     */
+    private void initializeDatabaseManager() {
+        databaseManager = new DatabaseManager(this);
+        getLogger().info("DatabaseManager initialized.");
+    }
+
+    /**
+     * Check for Vampire plugin and initialize integration if available.
+     */
+    private void checkVampirePlugin() {
+        org.bukkit.plugin.Plugin vampirePlugin = getServer().getPluginManager().getPlugin("Vampire");
+        if (vampirePlugin != null && vampirePlugin.isEnabled()) {
+            getLogger().info("Vampire plugin detected. Initializing integration...");
+            vampireIntegration = new VampireIntegration(this);
+            if (vampireIntegration.isAvailable()) {
+                getLogger().info("Vampire integration initialized successfully.");
+            } else {
+                getLogger().warning("Vampire plugin found but integration failed. Continuing without integration.");
+                vampireIntegration = null;
+            }
+        } else {
+            getLogger().info("Vampire plugin not found. Continuing without integration.");
+        }
+    }
+
+    /**
+     * Initialize managers
+     */
+    private void initializeManagers() {
+        skinManager = new SkinManager(this);
+        werewolfManager = new WerewolfManager(this, skinManager, vampireIntegration);
+        getLogger().info("Managers initialized!");
+    }
+
+    /**
+     * Register commands
+     */
+    private void registerCommands() {
+        org.clockworx.werewolf.commands.WerewolfCommand werewolfCommand = 
+            new org.clockworx.werewolf.commands.WerewolfCommand(this);
+        if (getCommand("werewolf") != null) {
+            getCommand("werewolf").setExecutor(werewolfCommand);
+            getCommand("werewolf").setTabCompleter(werewolfCommand);
+            getLogger().info("Registered 'werewolf' command.");
+        } else {
+            getLogger().warning("Could not find 'werewolf' command registration in plugin.yml!");
+        }
+    }
+
+    /**
+     * Register event listeners
+     */
+    private void registerListeners() {
+        getServer().getPluginManager().registerEvents(
+            new org.clockworx.werewolf.listeners.PlayerListener(this), this);
+        if (vampireIntegration != null) {
+            getServer().getPluginManager().registerEvents(
+                new org.clockworx.werewolf.listeners.VampireListener(this), this);
+        }
+        getLogger().info("Registered event listeners.");
+    }
+
+    /**
+     * Debug message
+     */
+    public void debug(String message) {
+        if (config != null && config.isDebug()) {
+            getLogger().info("[DEBUG] " + message);
+        }
+    }
+
+    /**
+     * Error message
+     */
+    public void error(String message, Throwable t) {
+        getLogger().log(Level.SEVERE, message, t);
+    }
+
+    /**
+     * Reloads the plugin's configuration files.
+     */
+    public void reload() {
+        try {
+            config.loadConfig();
+            getLogger().info("Configuration files reloaded.");
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "Failed to reload plugin configuration", e);
+        }
+    }
+
+    // Getters
+    public regalowl.simpledatalib.SimpleDataLib getSimpleDataLib() {
+        return sdl;
+    }
+
+    public WerewolfConfig getWerewolfConfig() {
+        return config;
+    }
+
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
+    }
+
+    public WerewolfManager getWerewolfManager() {
+        return werewolfManager;
+    }
+
+    public SkinManager getSkinManager() {
+        return skinManager;
+    }
+
+    public VampireIntegration getVampireIntegration() {
+        return vampireIntegration;
+    }
+
+    /**
+     * Static getter for the plugin instance.
+     * Useful for accessing the plugin from static contexts, but use with caution.
+     * Consider dependency injection where possible.
+     * @return The singleton instance of WerewolfPlugin.
+     */
+    public static WerewolfPlugin getInstance() {
+        return plugin;
+    }
+}
+
