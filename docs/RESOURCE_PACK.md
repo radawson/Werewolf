@@ -2,9 +2,17 @@
 
 This document provides comprehensive information about the Werewolf plugin's resource pack system and embedded HTTP server.
 
+## Important Note About Player Skins
+
+**Resource packs cannot reskin players in Minecraft.** The Werewolf plugin uses texture values from `skins.yml` (obtained from MineSkin.org) to change player skins, not resource pack textures.
+
+The resource pack server is available for other resource pack features (sounds, custom models, etc.) but is **not required** for werewolf skin transformations.
+
+For information about configuring werewolf skins, see the [Skin Configuration](#skin-configuration) section below.
+
 ## Overview
 
-The Werewolf plugin includes an embedded HTTP server that automatically serves the resource pack to players. This eliminates the need for external hosting while providing automatic hash calculation and seamless integration with the skin transformation system.
+The Werewolf plugin includes an embedded HTTP server that can automatically serve a resource pack to players. This is useful for custom sounds, models, or other resource pack features, but is **not used for player skin changes**.
 
 ## Embedded HTTP Server
 
@@ -105,70 +113,19 @@ resource-pack:
 3. For Windows Firewall: Add an inbound rule for the port
 4. Update `host` in config to your server's external IP or domain
 
-## Resource Pack Structure
+## Resource Pack Structure (Optional)
 
-The resource pack follows the standard Minecraft resource pack structure:
+The resource pack can be used for other features (sounds, custom models, etc.) but is **not required** for skin changes:
 
 ```
 resourcepack/
 ├── pack.mcmeta
 └── assets/
     └── minecraft/
-        └── textures/
-            └── entity/
-                └── player/
-                    ├── slim/
-                    │   ├── alpha.png
-                    │   ├── witherfang.png
-                    │   ├── silvermane.png
-                    │   └── bloodmoon.png
-                    └── wide/
-                        ├── alpha.png
-                        ├── witherfang.png
-                        ├── silvermane.png
-                        └── bloodmoon.png
+        └── sounds/    # Custom sounds
+        └── models/    # Custom models
+        └── ...        # Other resource pack features
 ```
-
-### Skin Texture Format
-
-#### File Requirements
-
-- **Format**: PNG (Portable Network Graphics)
-- **Dimensions**: 
-  - Classic: 64x64 pixels
-  - Modern: 64x128 pixels (supports more detail)
-- **Model Support**: Both slim (Alex) and wide (Steve) models
-
-#### File Naming
-
-Skin textures should be named according to the werewolf type:
-- `alpha.png` - Alpha werewolf skin
-- `witherfang.png` - Witherfang werewolf skin
-- `silvermane.png` - Silvermane werewolf skin
-- `bloodmoon.png` - Bloodmoon werewolf skin
-
-#### Directory Structure
-
-- **`slim/`**: Contains skins for the slim (Alex) player model
-- **`wide/`**: Contains skins for the wide (Steve) player model
-
-Both directories should contain the same skin files for maximum compatibility.
-
-### Adding Custom Skin Textures
-
-1. **Create or obtain PNG skin files** (64x64 or 64x128 pixels)
-2. **Place them in the appropriate directories**:
-   - `src/main/resources/resourcepack/assets/minecraft/textures/entity/player/slim/`
-   - `src/main/resources/resourcepack/assets/minecraft/textures/entity/player/wide/`
-3. **Rebuild the plugin** - The resource pack will be included in the JAR
-4. **Restart the server** - The resource pack will be extracted and served automatically
-
-### Skin Texture Creation Tips
-
-- Use a Minecraft skin editor (e.g., Minecraft Skin Editor, Skindex)
-- Ensure transparency is preserved for overlay layers
-- Test both slim and wide models
-- Keep file sizes reasonable (< 100KB per texture)
 
 ## Alternative Hosting Methods
 
@@ -282,15 +239,20 @@ If you enable external access:
 
 ## Troubleshooting Checklist
 
+### Resource Pack Server
 - [ ] Server started successfully (check logs)
 - [ ] Port is not in use by another service
 - [ ] Resource pack file exists: `plugins/Werewolf/resourcepack.zip`
 - [ ] URL is accessible: Test in browser
 - [ ] Hash is calculated: Check `config.yml`
 - [ ] Firewall allows connections (if external access)
-- [ ] Resource pack structure is correct
-- [ ] Skin textures are valid PNG files
-- [ ] Both slim and wide model skins exist
+
+### Skin Configuration
+- [ ] `skins.yml` exists in `plugins/Werewolf/`
+- [ ] Texture values are added to `skins.yml` (from MineSkin.org)
+- [ ] Skin PNG files exist in `skins_source/` (for editing)
+- [ ] Skin names match between `config.yml` and `skins.yml`
+- [ ] Plugin reloaded after updating `skins.yml`
 
 ## See Also
 

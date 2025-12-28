@@ -19,17 +19,33 @@ A modern Minecraft plugin that adds werewolf mechanics to your server, allowing 
 4. **Configure** the resource pack server in `plugins/Werewolf/config.yml` (optional - enabled by default)
 5. **Use** `/werewolf transform <player>` to transform a player into a werewolf
 
-## Resource Pack
+## Skin System
 
-The Werewolf plugin includes an embedded HTTP server that automatically serves the resource pack to players. This eliminates the need for external hosting.
+**Important**: Resource packs cannot reskin players in Minecraft. The Werewolf plugin uses texture values from `skins.yml` (obtained from MineSkin.org) to change player skins.
 
-### Automatic Setup
+### Quick Setup
 
-By default, the embedded HTTP server is enabled and will:
-- Extract the resource pack from the plugin JAR
-- Serve it on port 8080 (configurable)
-- Automatically calculate and provide the SHA-1 hash
-- Auto-populate the URL and hash in configuration
+1. **Edit skin PNG files** in `plugins/Werewolf/skins_source/` (create this directory if needed)
+2. **Upload PNGs to MineSkin.org** (https://mineskin.org/)
+3. **Copy texture values** to `plugins/Werewolf/skins.yml`
+4. **Reload the plugin** with `/werewolf reload`
+
+### Skin File Structure
+
+```
+plugins/Werewolf/
+├── skins.yml          ← Texture values (from MineSkin.org)
+└── skins_source/      ← PNG files (for editing)
+    ├── alpha.png
+    ├── witherfang.png
+    └── ...
+```
+
+For detailed information about configuring skins, see [docs/RESOURCE_PACK.md](docs/RESOURCE_PACK.md#skin-configuration).
+
+## Resource Pack (Optional)
+
+The Werewolf plugin includes an embedded HTTP server for serving resource packs (useful for custom sounds, models, etc.). This is **not required** for skin changes.
 
 ### Configuration
 

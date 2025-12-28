@@ -1,0 +1,32 @@
+# Werewolf Skin Textures
+# This file contains texture values for werewolf skins.
+# 
+# To add a new skin:
+# 1. Edit the PNG file in skins_source/ directory
+# 2. Upload the PNG to https://mineskin.org/
+# 3. Copy the "value" field from the MineSkin response
+# 4. Optionally copy the "signature" field if provided
+# 5. Add the texture value below
+#
+# Format:
+# skin-name:
+#   value: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUv..." 
+#   signature: "optional-signature-if-provided"
+
+skins:
+  alpha:
+    value: ""  # Paste MineSkin texture value here
+    signature: ""  # Optional: Paste MineSkin signature here
+  
+  witherfang:
+    value: ""  # Paste MineSkin texture value here
+    signature: ""  # Optional: Paste MineSkin signature here
+  
+  silvermane:
+    value: ""  # Paste MineSkin texture value here
+    signature: ""  # Optional: Paste MineSkin signature here
+  
+  bloodmoon:
+    value: ""  # Paste MineSkin texture value here
+    signature: ""  # Optional: Paste MineSkin signature here
+

@@ -200,7 +200,7 @@ tasks {
     processResources {
         // Process all resource files for version expansion
         // Note: ${project.version} will be replaced with the version value
-        filesMatching(listOf("config.yml", "plugin.yml", "paper-plugin.yml")) {
+        filesMatching(listOf("config.yml", "plugin.yml", "paper-plugin.yml", "skins.yml")) {
             // Replace ${project.version} with actual version
             filter { line -> line.replace("\${project.version}", project.version.toString()) }
             expand(

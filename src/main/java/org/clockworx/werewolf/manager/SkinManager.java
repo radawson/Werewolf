@@ -1,9 +1,13 @@
 package org.clockworx.werewolf.manager;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.clockworx.werewolf.WerewolfPlugin;
 import org.clockworx.werewolf.entity.WerewolfPlayer;
@@ -11,13 +15,15 @@ import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 
 /**
- * Manages werewolf skin changes using Paper API and resource packs.
+ * Manages werewolf skin changes using Paper API and texture values.
+ * Loads skin textures from skins.yml (texture values from MineSkin.org).
  * Handles applying and removing werewolf skins from players.
  */
 public class SkinManager {
     
     private final WerewolfPlugin plugin;
     private final Map<String, ProfileProperty> werewolfSkins;
+    private FileConfiguration skinsConfig;
     
     /**
      * Creates a new SkinManager.
@@ -27,27 +33,57 @@ public class SkinManager {
     public SkinManager(WerewolfPlugin plugin) {
         this.plugin = plugin;
         this.werewolfSkins = new HashMap<>();
+        this.skinsConfig = null;
         loadSkins();
     }
     
     /**
-     * Loads werewolf skin configurations from the config.
-     * In a full implementation, this would load actual skin textures.
+     * Loads werewolf skin textures from skins.yml.
+     * Texture values should be obtained from MineSkin.org.
      */
     private void loadSkins() {
-        // For now, we'll create placeholder skin properties
-        // In a full implementation, these would be loaded from the resource pack
-        // or from skin URLs/names in the config
+        File skinsFile = new File(plugin.getDataFolder(), "skins.yml");
         
-        Map<String, String> skinTypes = plugin.getWerewolfConfig().getSkinTypes();
-        for (Map.Entry<String, String> entry : skinTypes.entrySet()) {
-            // Create a placeholder ProfileProperty
-            // In reality, you would need actual skin texture data
-            // This is a simplified version
-            plugin.getLogger().info("Loaded skin type: " + entry.getKey() + " -> " + entry.getValue());
+        // Create default skins.yml if it doesn't exist
+        if (!skinsFile.exists()) {
+            plugin.saveResource("skins.yml", false);
+            plugin.getLogger().info("Created default skins.yml. Please add texture values from MineSkin.org");
         }
         
-        plugin.getLogger().info("Skin configurations loaded.");
+        // Load skins.yml
+        skinsConfig = YamlConfiguration.loadConfiguration(skinsFile);
+        ConfigurationSection skinsSection = skinsConfig.getConfigurationSection("skins");
+        
+        if (skinsSection == null) {
+            plugin.getLogger().warning("No 'skins' section found in skins.yml. No skins will be loaded.");
+            return;
+        }
+        
+        int loadedCount = 0;
+        for (String skinName : skinsSection.getKeys(false)) {
+            ConfigurationSection skinSection = skinsSection.getConfigurationSection(skinName);
+            if (skinSection != null) {
+                String value = skinSection.getString("value", "");
+                String signature = skinSection.getString("signature", "");
+                
+                if (value != null && !value.isEmpty()) {
+                    // Create ProfileProperty with texture value
+                    ProfileProperty skinProperty = new ProfileProperty("textures", value, signature != null ? signature : "");
+                    werewolfSkins.put(skinName.toLowerCase(), skinProperty);
+                    loadedCount++;
+                    plugin.getLogger().info("Loaded skin texture: " + skinName);
+                } else {
+                    plugin.getLogger().warning("Skin '" + skinName + "' has no texture value. Skipping.");
+                }
+            }
+        }
+        
+        if (loadedCount == 0) {
+            plugin.getLogger().warning("No valid skin textures loaded from skins.yml. " +
+                "Please add texture values from MineSkin.org to skins.yml");
+        } else {
+            plugin.getLogger().info("Loaded " + loadedCount + " werewolf skin texture(s).");
+        }
     }
     
     /**
@@ -154,20 +190,22 @@ public class SkinManager {
     
     /**
      * Gets the werewolf skin property for a given type.
+     * Loads from skins.yml (texture values from MineSkin.org).
      *
      * @param skinType The werewolf type (alpha, witherfang, etc.).
      * @return The ProfileProperty for the skin, or null if not found.
      */
     private ProfileProperty getWerewolfSkin(String skinType) {
-        // This is a placeholder implementation
-        // In a full implementation, you would:
-        // 1. Load skin textures from the resource pack
-        // 2. Convert them to ProfileProperty format
-        // 3. Cache them for reuse
-        
-        // For now, return null to indicate skin loading needs to be implemented
-        // The actual skin data would come from the resource pack or skin service
         return werewolfSkins.get(skinType.toLowerCase());
+    }
+    
+    /**
+     * Reloads skin textures from skins.yml.
+     * Useful after updating skins.yml without restarting the server.
+     */
+    public void reloadSkins() {
+        werewolfSkins.clear();
+        loadSkins();
     }
     
     /**
