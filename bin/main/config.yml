@@ -23,8 +23,12 @@ werewolf:
 
 # Resource Pack Configuration
 resource-pack:
-  url: ""  # URL to resource pack (if hosting externally)
-  hash: ""  # SHA-1 hash of resource pack
+  server:
+    enabled: true  # Enable embedded HTTP server for resource pack
+    port: 8080     # Port for HTTP server (default: 8080)
+    host: "localhost"  # Host (usually "localhost" for local access)
+  url: ""  # Auto-populated if server enabled, or manual URL for external hosting
+  hash: ""  # Auto-calculated if server enabled, or manual SHA-1 hash
   required: false  # Whether players must accept resource pack
 
 # Vampire Integration Settings

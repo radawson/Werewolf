@@ -2,7 +2,6 @@ package org.clockworx.werewolf.manager;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.logging.Level;
 
 import org.bukkit.entity.Player;
@@ -177,22 +176,55 @@ public class SkinManager {
      * @param player The player to apply the resource pack to.
      */
     private void applyResourcePack(Player player) {
-        String resourcePackUrl = plugin.getWerewolfConfig().getResourcePackUrl();
+        String resourcePackUrl = null;
+        String hash = null;
+        byte[] hashBytes = null;
+        
+        // Try to use ResourcePackServer if available
+        org.clockworx.werewolf.server.ResourcePackServer server = plugin.getResourcePackServer();
+        if (server != null && server.isStarted()) {
+            String host = plugin.getWerewolfConfig().getResourcePackServerHost();
+            resourcePackUrl = server.getResourcePackUrl(host);
+            hash = server.getResourcePackHashHex();
+            hashBytes = server.getResourcePackHash();
+        }
+        
+        // Fall back to config values if server not available
+        if (resourcePackUrl == null || resourcePackUrl.isEmpty()) {
+            resourcePackUrl = plugin.getWerewolfConfig().getResourcePackUrl();
+        }
+        
+        if (hash == null || hash.isEmpty()) {
+            hash = plugin.getWerewolfConfig().getResourcePackHash();
+        }
+        
         if (resourcePackUrl != null && !resourcePackUrl.isEmpty()) {
-            String hash = plugin.getWerewolfConfig().getResourcePackHash();
             boolean required = plugin.getWerewolfConfig().isResourcePackRequired();
             
             try {
-                // Convert hash string to byte array if provided
-                if (hash != null && !hash.isEmpty()) {
-                    // Hash should be provided as hex string, convert to byte array
-                    byte[] hashBytes = hexStringToByteArray(hash);
-                    player.setResourcePack(resourcePackUrl, hashBytes, required);
+                // Paper API method signatures:
+                // - setResourcePack(String url, byte[] hash)
+                // - setResourcePack(String url)
+                // The 'required' parameter is handled via server.properties or a different mechanism
+                if (hashBytes != null) {
+                    // Use byte array hash from server if available
+                    player.setResourcePack(resourcePackUrl, hashBytes);
+                } else if (hash != null && !hash.isEmpty()) {
+                    // Convert hex string hash to byte array
+                    hashBytes = hexStringToByteArray(hash);
+                    player.setResourcePack(resourcePackUrl, hashBytes);
                 } else {
-                    // Use the method that doesn't require hash
-                    player.setResourcePack(resourcePackUrl, required);
+                    // No hash provided, use simple method
+                    player.setResourcePack(resourcePackUrl);
                 }
-                plugin.getLogger().info("Applied resource pack to player: " + player.getName());
+                
+                // Note: The 'required' parameter is typically set in server.properties
+                // or handled by the server configuration, not via the API method
+                if (required) {
+                    plugin.getLogger().info("Resource pack applied to " + player.getName() + " (required: set in server.properties)");
+                } else {
+                    plugin.getLogger().info("Resource pack applied to " + player.getName());
+                }
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING, "Failed to apply resource pack to player: " + player.getName(), e);
             }

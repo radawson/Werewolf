@@ -35,6 +35,13 @@ public class WerewolfConfig {
     // Werewolf settings
     private boolean transformationEnabled;
     private boolean skinChangeEnabled;
+    
+    // Resource pack server settings
+    private boolean resourcePackServerEnabled;
+    private int resourcePackServerPort;
+    private String resourcePackServerHost;
+    
+    // Resource pack settings
     private String resourcePackUrl;
     private String resourcePackHash;
     private boolean resourcePackRequired;
@@ -148,10 +155,26 @@ public class WerewolfConfig {
         
         ConfigurationSection resourcePackSection = config.getConfigurationSection("resource-pack");
         if (resourcePackSection != null) {
+            // Load server settings
+            ConfigurationSection serverSection = resourcePackSection.getConfigurationSection("server");
+            if (serverSection != null) {
+                resourcePackServerEnabled = serverSection.getBoolean("enabled", true);
+                resourcePackServerPort = serverSection.getInt("port", 8080);
+                resourcePackServerHost = serverSection.getString("host", "localhost");
+            } else {
+                resourcePackServerEnabled = true;
+                resourcePackServerPort = 8080;
+                resourcePackServerHost = "localhost";
+            }
+            
+            // Load resource pack settings
             resourcePackUrl = resourcePackSection.getString("url", "");
             resourcePackHash = resourcePackSection.getString("hash", "");
             resourcePackRequired = resourcePackSection.getBoolean("required", false);
         } else {
+            resourcePackServerEnabled = true;
+            resourcePackServerPort = 8080;
+            resourcePackServerHost = "localhost";
             resourcePackUrl = "";
             resourcePackHash = "";
             resourcePackRequired = false;
@@ -237,12 +260,48 @@ public class WerewolfConfig {
         return skinChangeEnabled;
     }
     
+    public boolean isResourcePackServerEnabled() {
+        return resourcePackServerEnabled;
+    }
+    
+    public int getResourcePackServerPort() {
+        return resourcePackServerPort;
+    }
+    
+    public String getResourcePackServerHost() {
+        return resourcePackServerHost;
+    }
+    
     public String getResourcePackUrl() {
         return resourcePackUrl;
     }
     
+    public void setResourcePackUrl(String url) {
+        this.resourcePackUrl = url;
+        if (config != null) {
+            config.set("resource-pack.url", url);
+            try {
+                config.save(configFile);
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING, "Failed to save resource pack URL to config", e);
+            }
+        }
+    }
+    
     public String getResourcePackHash() {
         return resourcePackHash;
+    }
+    
+    public void setResourcePackHash(String hash) {
+        this.resourcePackHash = hash;
+        if (config != null) {
+            config.set("resource-pack.hash", hash);
+            try {
+                config.save(configFile);
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING, "Failed to save resource pack hash to config", e);
+            }
+        }
     }
     
     public boolean isResourcePackRequired() {

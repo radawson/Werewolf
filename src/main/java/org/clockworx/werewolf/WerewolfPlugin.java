@@ -8,6 +8,7 @@ import org.clockworx.werewolf.database.DatabaseManager;
 import org.clockworx.werewolf.integration.VampireIntegration;
 import org.clockworx.werewolf.manager.SkinManager;
 import org.clockworx.werewolf.manager.WerewolfManager;
+import org.clockworx.werewolf.server.ResourcePackServer;
 
 /**
  * Main plugin class for the Werewolf plugin.
@@ -22,6 +23,7 @@ public final class WerewolfPlugin extends JavaPlugin {
     private WerewolfManager werewolfManager;
     private SkinManager skinManager;
     private VampireIntegration vampireIntegration;
+    private ResourcePackServer resourcePackServer;
 
     @Override
     public void onEnable() {
@@ -60,6 +62,9 @@ public final class WerewolfPlugin extends JavaPlugin {
 
         // --- Check for Vampire Plugin ---
         checkVampirePlugin();
+
+        // --- Initialize Resource Pack Server ---
+        initializeResourcePackServer();
 
         // --- Initialize Core Components ---
         initializeManagers();
@@ -100,6 +105,15 @@ public final class WerewolfPlugin extends JavaPlugin {
             org.clockworx.werewolf.database.HibernateConfig.shutdown();
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Error during HibernateConfig shutdown in onDisable", e);
+        }
+
+        // Shutdown Resource Pack Server
+        if (resourcePackServer != null) {
+            try {
+                resourcePackServer.stopServer();
+            } catch (Exception e) {
+                getLogger().log(Level.SEVERE, "Error during ResourcePackServer shutdown in onDisable", e);
+            }
         }
 
         // Shutdown SimpleDataLib
@@ -225,6 +239,38 @@ public final class WerewolfPlugin extends JavaPlugin {
     }
 
     /**
+     * Initialize resource pack server if enabled in config.
+     */
+    private void initializeResourcePackServer() {
+        if (config.isResourcePackServerEnabled()) {
+            int port = config.getResourcePackServerPort();
+            resourcePackServer = new ResourcePackServer(this, port);
+            
+            if (resourcePackServer.startServer()) {
+                // Auto-populate URL and hash in config
+                String host = config.getResourcePackServerHost();
+                String url = resourcePackServer.getResourcePackUrl(host);
+                String hash = resourcePackServer.getResourcePackHashHex();
+                
+                if (url != null && !url.isEmpty()) {
+                    config.setResourcePackUrl(url);
+                    getLogger().info("Resource pack URL auto-populated: " + url);
+                }
+                
+                if (hash != null && !hash.isEmpty()) {
+                    config.setResourcePackHash(hash);
+                    getLogger().info("Resource pack hash auto-populated: " + hash);
+                }
+            } else {
+                getLogger().warning("Resource pack server failed to start. You may need to configure a manual URL.");
+                resourcePackServer = null;
+            }
+        } else {
+            getLogger().info("Resource pack server is disabled. Using manual URL configuration.");
+        }
+    }
+
+    /**
      * Initialize managers
      */
     private void initializeManagers() {
@@ -312,6 +358,10 @@ public final class WerewolfPlugin extends JavaPlugin {
 
     public VampireIntegration getVampireIntegration() {
         return vampireIntegration;
+    }
+
+    public ResourcePackServer getResourcePackServer() {
+        return resourcePackServer;
     }
 
     /**

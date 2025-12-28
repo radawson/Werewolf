@@ -47,6 +47,9 @@ dependencies {
     
     // SimpleDataLib - Using local build
     implementation("regalowl.simpledatalib:simpledatalib:0.1.088-SNAPSHOT")
+    
+    // HTTP Server for resource pack serving
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 }
 
 java {
@@ -153,6 +156,9 @@ tasks {
         
         // Relocate SimpleDataLib
         relocate("regalowl.simpledatalib", "org.clockworx.werewolf.lib.simpledatalib")
+        
+        // Relocate NanoHTTPD
+        relocate("fi.iki.elonen", "org.clockworx.werewolf.lib.nanohttpd")
         
         // IMPORTANT: Specifically exclude the core SQLite package from relocation
         // to prevent breaking native library loading (JNI).
