@@ -45,7 +45,7 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
     
-    // SimpleDataLib - Using local build
+    // SimpleDataLib - Using local build (includes OpenCSV transitively)
     implementation("regalowl.simpledatalib:simpledatalib:0.1.088-SNAPSHOT")
     
     // HTTP Server for resource pack serving
@@ -154,7 +154,7 @@ tasks {
         // Relocate the Xerial part of SQLite driver, but NOT the core org.sqlite part
         relocate("org.xerial.sqlite", "org.clockworx.werewolf.lib.xerial.sqlite")
         
-        // Relocate SimpleDataLib
+        // Relocate SimpleDataLib (includes OpenCSV transitively)
         relocate("regalowl.simpledatalib", "org.clockworx.werewolf.lib.simpledatalib")
         
         // Relocate NanoHTTPD
