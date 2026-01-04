@@ -2,7 +2,11 @@ package org.clockworx.werewolf;
 
 import java.util.logging.Level;
 
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
 import org.clockworx.werewolf.config.WerewolfConfig;
@@ -298,18 +302,29 @@ public final class WerewolfPlugin extends JavaPlugin {
     }
 
     /**
-     * Register commands
+     * Register commands using Paper's Brigadier command system
      */
+    @SuppressWarnings("UnstableApiUsage")
     private void registerCommands() {
-        org.clockworx.werewolf.commands.WerewolfCommand werewolfCommand = 
-            new org.clockworx.werewolf.commands.WerewolfCommand(this);
-        if (getCommand("werewolf") != null) {
-            getCommand("werewolf").setExecutor(werewolfCommand);
-            getCommand("werewolf").setTabCompleter(werewolfCommand);
-            getLogger().info("Registered 'werewolf' command.");
-        } else {
-            getLogger().warning("Could not find 'werewolf' command registration in plugin.yml!");
-        }
+        LifecycleEventManager<Plugin> manager = getLifecycleManager();
+        
+        manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
+            Commands commands = event.registrar();
+            
+            org.clockworx.werewolf.command.WerewolfCommandTree commandTree = 
+                new org.clockworx.werewolf.command.WerewolfCommandTree(this);
+            
+            try {
+                commands.register(
+                    commandTree.build().build(),
+                    "Main command for the Werewolf plugin",
+                    java.util.Collections.emptyList()
+                );
+                getLogger().info("Registered 'werewolf' command using Brigadier.");
+            } catch (Exception e) {
+                getLogger().log(Level.SEVERE, "Failed to register 'werewolf' command", e);
+            }
+        });
     }
 
     /**
