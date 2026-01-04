@@ -3,6 +3,8 @@ package org.clockworx.werewolf;
 import java.util.logging.Level;
 
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.clockworx.werewolf.config.WerewolfConfig;
 import org.clockworx.werewolf.database.DatabaseManager;
 import org.clockworx.werewolf.integration.VampireIntegration;
@@ -63,6 +65,44 @@ public final class WerewolfPlugin extends JavaPlugin {
         
         // --- Initialize API ---
         org.clockworx.werewolf.api.WerewolfAPI.initialize(this);
+
+        // --- Initialize bStats Metrics ---
+        // Plugin ID for WereWolf Redux on bStats
+        int pluginId = 28710;
+        try {
+            Metrics metrics = new Metrics(this, pluginId);
+            
+            // Add custom charts
+            metrics.addCustomChart(new SimplePie("database_type", () -> {
+                if (config != null) {
+                    return config.getDatabaseType();
+                }
+                return "Unknown";
+            }));
+            
+            metrics.addCustomChart(new SimplePie("debug_mode", () -> {
+                if (config != null) {
+                    return config.isDebug() ? "Enabled" : "Disabled";
+                }
+                return "Unknown";
+            }));
+            
+            metrics.addCustomChart(new SimplePie("plugin_version", () -> {
+                String version = getPluginMeta().getVersion();
+                return version != null ? version : "Unknown";
+            }));
+            
+            metrics.addCustomChart(new SimplePie("vampire_integration", () -> {
+                if (vampireIntegration != null && vampireIntegration.isAvailable()) {
+                    return "Enabled";
+                }
+                return "Disabled";
+            }));
+            
+            getLogger().info("bStats metrics initialized (plugin ID: " + pluginId + ")");
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to initialize bStats metrics", e);
+        }
 
         getLogger().info("Werewolf plugin enabled successfully!");
     }

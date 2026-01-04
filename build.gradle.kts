@@ -44,6 +44,8 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
     
+    // bStats Metrics
+    implementation("org.bstats:bstats-bukkit:3.1.0")
     
     // HTTP Server for resource pack serving
     implementation("org.nanohttpd:nanohttpd:2.3.1")
@@ -154,6 +156,9 @@ tasks {
         
         // Relocate NanoHTTPD
         relocate("fi.iki.elonen", "org.clockworx.werewolf.lib.nanohttpd")
+        
+        // Relocate bStats to avoid conflicts with other plugins
+        relocate("org.bstats", "${project.group}.lib.bstats")
         
         // IMPORTANT: Specifically exclude the core SQLite package from relocation
         // to prevent breaking native library loading (JNI).
