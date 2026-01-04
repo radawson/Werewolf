@@ -9,7 +9,7 @@ import org.clockworx.werewolf.entity.WerewolfPlayer;
 
 /**
  * Database manager for werewolf player data.
- * Handles all database operations using Hibernate and SimpleDataLib.
+ * Handles all database operations using Hibernate.
  */
 public class DatabaseManager {
     

@@ -12,7 +12,6 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://jitpack.io")
-    // Local Maven repository for SimpleDataLib
     mavenLocal()
 }
 
@@ -45,8 +44,6 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
     
-    // SimpleDataLib - Using local build (includes OpenCSV transitively)
-    implementation("regalowl.simpledatalib:simpledatalib:0.1.088-SNAPSHOT")
     
     // HTTP Server for resource pack serving
     implementation("org.nanohttpd:nanohttpd:2.3.1")
@@ -154,8 +151,6 @@ tasks {
         // Relocate the Xerial part of SQLite driver, but NOT the core org.sqlite part
         relocate("org.xerial.sqlite", "org.clockworx.werewolf.lib.xerial.sqlite")
         
-        // Relocate SimpleDataLib (includes OpenCSV transitively)
-        relocate("regalowl.simpledatalib", "org.clockworx.werewolf.lib.simpledatalib")
         
         // Relocate NanoHTTPD
         relocate("fi.iki.elonen", "org.clockworx.werewolf.lib.nanohttpd")

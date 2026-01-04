@@ -65,30 +65,16 @@ public class WerewolfConfig {
      * Loads the configuration from file, creating default if it doesn't exist.
      */
     public void loadConfig() {
-        // Use SimpleDataLib FileTools if available, otherwise fall back to manual operations
-        regalowl.simpledatalib.SimpleDataLib sdl = plugin.getSimpleDataLib();
-        
-        if (sdl != null && sdl.getFileTools() != null) {
-            // Use FileTools for directory creation
-            sdl.getFileTools().makeFolder(plugin.getDataFolder().getAbsolutePath());
-        } else {
-            // Fallback to manual directory creation
-            if (!plugin.getDataFolder().exists()) {
-                plugin.getDataFolder().mkdir();
-            }
+        // Ensure data folder exists
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
         }
         
         configFile = new File(plugin.getDataFolder(), "config.yml");
         if (!configFile.exists()) {
             try {
-                // Use FileTools if available, otherwise use Bukkit's saveResource
-                if (sdl != null && sdl.getFileTools() != null) {
-                    String resourcePath = "config.yml";
-                    String destPath = configFile.getAbsolutePath();
-                    sdl.getFileTools().copyFileFromJar(resourcePath, destPath);
-                } else {
-                    plugin.saveResource("config.yml", false);
-                }
+                // Use Bukkit's saveResource to copy from JAR
+                plugin.saveResource("config.yml", false);
                 
                 if (configFile.exists()) {
                     plugin.getLogger().info("Created default config.yml from JAR resource.");

@@ -17,7 +17,6 @@ import org.clockworx.werewolf.server.ResourcePackServer;
 public final class WerewolfPlugin extends JavaPlugin {
 
     private static WerewolfPlugin plugin;
-    private regalowl.simpledatalib.SimpleDataLib sdl;
     private WerewolfConfig config;
     private DatabaseManager databaseManager;
     private WerewolfManager werewolfManager;
@@ -28,18 +27,6 @@ public final class WerewolfPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         plugin = this; // Assign in onEnable
-
-        // --- Initialize SimpleDataLib ---
-        // Initialize SimpleDataLib early for error logging and file utilities
-        try {
-            sdl = new regalowl.simpledatalib.SimpleDataLib("Werewolf");
-            sdl.setPlugin(this); // Enable Bukkit integration
-            sdl.initialize();
-            getLogger().info("SimpleDataLib initialized successfully.");
-        } catch (Exception e) {
-            getLogger().log(Level.SEVERE, "Failed to initialize SimpleDataLib. Continuing without it.", e);
-            sdl = null; // Set to null if initialization fails
-        }
 
         // --- Configuration ---
         // Load configurations first
@@ -113,15 +100,6 @@ public final class WerewolfPlugin extends JavaPlugin {
                 resourcePackServer.stopServer();
             } catch (Exception e) {
                 getLogger().log(Level.SEVERE, "Error during ResourcePackServer shutdown in onDisable", e);
-            }
-        }
-
-        // Shutdown SimpleDataLib
-        if (sdl != null) {
-            try {
-                sdl.shutDown();
-            } catch (Exception e) {
-                getLogger().log(Level.SEVERE, "Error during SimpleDataLib shutdown", e);
             }
         }
 
@@ -336,10 +314,6 @@ public final class WerewolfPlugin extends JavaPlugin {
     }
 
     // Getters
-    public regalowl.simpledatalib.SimpleDataLib getSimpleDataLib() {
-        return sdl;
-    }
-
     public WerewolfConfig getWerewolfConfig() {
         return config;
     }
