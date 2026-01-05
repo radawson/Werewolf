@@ -113,7 +113,8 @@ public final class WerewolfPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Save data on disable
+        // Mark shutdown early to prevent new async operations
+        // Save data on disable - this will also cancel pending async operations
         if (werewolfManager != null) {
             try {
                 werewolfManager.shutdown();
@@ -122,13 +123,21 @@ public final class WerewolfPlugin extends JavaPlugin {
             }
         }
 
-        // Shutdown database resources
+        // Shutdown database resources - mark as shutting down to prevent new operations
         if (databaseManager != null) {
             try {
                 databaseManager.shutdown();
             } catch (Exception e) {
                 getLogger().log(Level.SEVERE, "Error during DatabaseManager shutdown in onDisable", e);
             }
+        }
+        
+        // Small delay to allow in-flight async operations to complete or be cancelled
+        // This helps prevent "zip file closed" errors during shutdown
+        try {
+            Thread.sleep(100); // 100ms should be enough for most operations to complete or be cancelled
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         
         // Shutdown Hibernate SessionFactory

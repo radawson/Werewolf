@@ -49,6 +49,13 @@ public class WerewolfCommandTree {
             })
         );
         
+        // Info subcommand
+        root.then(LiteralArgumentBuilder.<CommandSourceStack>literal("info")
+            .executes(context -> {
+                return executeSubcommand(context, new String[]{"info"});
+            })
+        );
+        
         // Transform subcommand
         LiteralArgumentBuilder<CommandSourceStack> transform = LiteralArgumentBuilder.<CommandSourceStack>literal("transform");
         transform.executes(context -> {

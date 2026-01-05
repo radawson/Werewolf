@@ -209,6 +209,15 @@ public class SkinManager {
     }
     
     /**
+     * Gets the number of loaded werewolf skins.
+     *
+     * @return The number of loaded skins.
+     */
+    public int getLoadedSkinCount() {
+        return werewolfSkins.size();
+    }
+    
+    /**
      * Applies the resource pack to a player if configured.
      *
      * @param player The player to apply the resource pack to.

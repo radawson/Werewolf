@@ -31,6 +31,10 @@ public class WerewolfManager {
     // Use ConcurrentHashMap as loading/saving might happen async
     private final Map<UUID, WerewolfPlayer> werewolfCache = new ConcurrentHashMap<>();
     
+    // Shutdown tracking
+    private volatile boolean isShuttingDown = false;
+    private CompletableFuture<?> loadFuture = null;
+    
     /**
      * Creates a new WerewolfManager.
      *
@@ -65,6 +69,11 @@ public class WerewolfManager {
         
         // Load actual player data from the database asynchronously
         databaseManager.getPlayer(uuid).thenAcceptAsync(loadedWerewolfPlayer -> {
+            // Don't process if shutting down
+            if (isShuttingDown) {
+                return;
+            }
+            
             if (loadedWerewolfPlayer != null) {
                 plugin.debug("Loaded data for player: " + playerName + ". Updating cached object.");
                 loadedWerewolfPlayer.setName(playerName); // Ensure name is current
@@ -75,6 +84,10 @@ public class WerewolfManager {
                 // Schedule skin/effects update on main thread if player is werewolf
                 if (cachedWP.isWerewolf()) {
                     Bukkit.getScheduler().runTask(plugin, () -> {
+                        // Check again in case shutdown happened during scheduling
+                        if (isShuttingDown) {
+                            return;
+                        }
                         Player onlinePlayer = Bukkit.getPlayer(uuid);
                         if (onlinePlayer != null && onlinePlayer.isOnline()) {
                             applyTransformation(onlinePlayer, cachedWP);
@@ -85,7 +98,10 @@ public class WerewolfManager {
                 plugin.debug("No existing data found for " + playerName + ". Initial cache entry is sufficient.");
             }
         }).exceptionally(ex -> {
-            plugin.error("Failed to load player data for " + playerName + ". Using default cache entry.", ex);
+            // Suppress errors during shutdown
+            if (!isShuttingDown) {
+                plugin.error("Failed to load player data for " + playerName + ". Using default cache entry.", ex);
+            }
             return null;
         });
     }
@@ -302,16 +318,46 @@ public class WerewolfManager {
      * Populates the initial cache.
      */
     public void loadWerewolves() {
+        if (isShuttingDown) {
+            return; // Don't start new operations during shutdown
+        }
+        
         werewolfCache.clear();
-        databaseManager.getAllWerewolves().thenAcceptAsync(players -> {
+        loadFuture = databaseManager.getAllWerewolves().thenAcceptAsync(players -> {
+            // Don't process if shutting down
+            if (isShuttingDown) {
+                return;
+            }
+            
             if (players != null) {
-                players.forEach(wp -> werewolfCache.put(wp.getUuid(), wp));
-                plugin.getLogger().info("Loaded " + werewolfCache.size() + " werewolf player records from database.");
+                if (players.isEmpty()) {
+                    // Empty database is a valid edge case, not an error
+                    plugin.getLogger().info("No existing werewolf records found in database. Starting with empty cache.");
+                } else {
+                    players.forEach(wp -> werewolfCache.put(wp.getUuid(), wp));
+                    plugin.getLogger().info("Loaded " + werewolfCache.size() + " werewolf player records from database.");
+                }
             } else {
                 plugin.getLogger().warning("Failed to load player data from database (getAllWerewolves returned null).");
             }
         }).exceptionally(ex -> {
-            plugin.error("Error loading player data from database.", ex);
+            // Suppress errors during shutdown
+            if (!isShuttingDown) {
+                // Check if it's a shutdown-related error
+                Throwable cause = ex;
+                while (cause != null) {
+                    if (cause instanceof IllegalStateException) {
+                        String message = cause.getMessage();
+                        if (message != null && (message.contains("zip file closed") || 
+                                                message.contains("classloader"))) {
+                            // Expected during shutdown, suppress
+                            return null;
+                        }
+                    }
+                    cause = cause.getCause();
+                }
+                plugin.error("Error loading player data from database.", ex);
+            }
             return null;
         });
     }
@@ -357,6 +403,23 @@ public class WerewolfManager {
      * Shuts down the manager and saves all pending data.
      */
     public void shutdown() {
+        isShuttingDown = true;
+        
+        // Cancel pending load operation if still running
+        if (loadFuture != null && !loadFuture.isDone()) {
+            loadFuture.cancel(true);
+            plugin.getLogger().info("Cancelled pending werewolf load operation during shutdown.");
+        }
+        
+        // Wait briefly for any in-flight operations to complete (with timeout)
+        if (loadFuture != null && !loadFuture.isDone()) {
+            try {
+                loadFuture.get(1, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                // Timeout or cancellation is expected, ignore
+            }
+        }
+        
         saveAllWerewolves();
         werewolfCache.clear();
     }

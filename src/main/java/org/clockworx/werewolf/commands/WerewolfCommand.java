@@ -19,6 +19,7 @@ import org.clockworx.werewolf.entity.WerewolfPlayer;
 public class WerewolfCommand implements CommandExecutor, TabCompleter {
     
     private final WerewolfPlugin plugin;
+    private final org.clockworx.werewolf.commands.CmdWerewolfInfo infoCommand;
     
     /**
      * Creates a new WerewolfCommand.
@@ -27,6 +28,7 @@ public class WerewolfCommand implements CommandExecutor, TabCompleter {
      */
     public WerewolfCommand(WerewolfPlugin plugin) {
         this.plugin = plugin;
+        this.infoCommand = new org.clockworx.werewolf.commands.CmdWerewolfInfo(plugin);
     }
     
     @Override
@@ -46,6 +48,8 @@ public class WerewolfCommand implements CommandExecutor, TabCompleter {
                 return handleCure(sender, args);
             case "status":
                 return handleStatus(sender, args);
+            case "info":
+                return infoCommand.execute(sender, command, label, args);
             case "help":
                 return handleHelp(sender);
             default:
@@ -188,6 +192,7 @@ public class WerewolfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§7/werewolf transform [player] - Transform into a werewolf");
         sender.sendMessage("§7/werewolf cure [player] - Cure werewolf status");
         sender.sendMessage("§7/werewolf status [player] - Check werewolf status");
+        sender.sendMessage("§7/werewolf info - Show plugin information");
         sender.sendMessage("§7/werewolf help - Show this help");
         return true;
     }
@@ -195,7 +200,7 @@ public class WerewolfCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("transform", "cure", "status", "help");
+            return Arrays.asList("transform", "cure", "status", "info", "help");
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("transform") || 
                                         args[0].equalsIgnoreCase("cure") || 
                                         args[0].equalsIgnoreCase("status"))) {
