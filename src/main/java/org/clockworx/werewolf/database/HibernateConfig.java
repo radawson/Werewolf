@@ -67,7 +67,7 @@ public class HibernateConfig {
                 // Database-specific settings
                 if ("mysql".equalsIgnoreCase(dbType)) {
                     plugin.getLogger().log(Level.INFO, "Configuring Hibernate for MySQL...");
-                    settings.put(Environment.DIALECT, "org.hibernate.dialect.MySQLDialect");
+                    // Dialect is auto-detected from JDBC URL, no need to set explicitly
                     settings.put(Environment.CONNECTION_PROVIDER, "org.hibernate.hikaricp.internal.HikariCPConnectionProvider");
 
                     // Hikari Specific Properties
