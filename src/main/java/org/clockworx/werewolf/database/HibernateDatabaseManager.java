@@ -7,6 +7,7 @@ import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.clockworx.werewolf.WerewolfPlugin;
 import org.clockworx.werewolf.entity.WerewolfPlayer;
 import org.clockworx.werewolf.entity.WerewolfPlayerEntity;
@@ -32,8 +33,20 @@ public class HibernateDatabaseManager {
     public HibernateDatabaseManager(WerewolfPlugin plugin) {
         this.plugin = plugin;
         // Use Paper's async scheduler for better integration with server task tracking
-        this.asyncExecutor = task -> 
-            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, task);
+        // If plugin is disabled or shutting down, execute synchronously to avoid IllegalPluginAccessException
+        this.asyncExecutor = task -> {
+            if (plugin.isEnabled() && !HibernateDatabaseManager.this.isShuttingDown) {
+                try {
+                    plugin.getServer().getScheduler().runTaskAsynchronously(plugin, task);
+                } catch (IllegalPluginAccessException e) {
+                    // Plugin was disabled between check and scheduling, execute synchronously
+                    task.run();
+                }
+            } else {
+                // During shutdown or when plugin is disabled, execute synchronously
+                task.run();
+            }
+        };
     }
 
     /**

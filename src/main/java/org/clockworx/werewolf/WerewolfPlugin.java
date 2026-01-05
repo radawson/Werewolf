@@ -115,22 +115,22 @@ public final class WerewolfPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Mark shutdown early to prevent new async operations
+        // Mark database manager as shutting down early to prevent new async operations
+        // This must be done before werewolfManager.shutdown() which may save data
+        if (databaseManager != null) {
+            try {
+                databaseManager.shutdown();
+            } catch (Exception e) {
+                getLogger().log(Level.SEVERE, "Error during DatabaseManager shutdown in onDisable", e);
+            }
+        }
+        
         // Save data on disable - this will also cancel pending async operations
         if (werewolfManager != null) {
             try {
                 werewolfManager.shutdown();
             } catch (Exception e) {
                 getLogger().log(Level.SEVERE, "Error during WerewolfManager shutdown in onDisable", e);
-            }
-        }
-
-        // Shutdown database resources - mark as shutting down to prevent new operations
-        if (databaseManager != null) {
-            try {
-                databaseManager.shutdown();
-            } catch (Exception e) {
-                getLogger().log(Level.SEVERE, "Error during DatabaseManager shutdown in onDisable", e);
             }
         }
         

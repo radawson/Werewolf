@@ -182,22 +182,10 @@ public class ConfigUpdater {
         File backupFile = new File(configFile.getParent(), backupFileName);
         
         try {
-            // Use FileTools if available, otherwise fall back to Files.copy
-            regalowl.simpledatalib.SimpleDataLib sdl = plugin.getSimpleDataLib();
-            if (sdl != null && sdl.getFileTools() != null) {
-                sdl.getFileTools().copyFile(configFile.getAbsolutePath(), backupFile.getAbsolutePath());
-            } else {
-                Files.copy(configFile.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            }
+            Files.copy(configFile.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             return backupFile;
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to create backup file: " + backupFile.getName(), e);
-            // Also log to SimpleDataLib error log if available
-            regalowl.simpledatalib.SimpleDataLib sdl = plugin.getSimpleDataLib();
-            if (sdl != null && sdl.getErrorWriter() != null) {
-                sdl.getErrorWriter().writeError((e instanceof Exception) ? (Exception) e : new Exception(e), 
-                    "Failed to create backup file: " + backupFile.getName());
-            }
             return null;
         }
     }
