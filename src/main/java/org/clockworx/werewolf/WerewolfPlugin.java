@@ -2,6 +2,8 @@ package org.clockworx.werewolf;
 
 import java.util.logging.Level;
 
+import org.bukkit.event.Event;
+import org.bukkit.event.EventPriority;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import io.papermc.paper.command.brigadier.Commands;
@@ -262,6 +264,8 @@ public final class WerewolfPlugin extends JavaPlugin {
             vampireIntegration = new VampireIntegration(this);
             if (vampireIntegration.isAvailable()) {
                 getLogger().info("Vampire integration initialized successfully.");
+                // Register Vampire event listeners now that integration is available
+                registerVampireEventListeners();
             } else {
                 getLogger().warning("Vampire plugin found but integration failed. Continuing without integration.");
                 vampireIntegration = null;
@@ -347,10 +351,76 @@ public final class WerewolfPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
             new org.clockworx.werewolf.listeners.IntegrationListener(this), this);
         if (vampireIntegration != null) {
-            getServer().getPluginManager().registerEvents(
-                new org.clockworx.werewolf.listeners.VampireListener(this), this);
+            registerVampireEventListeners();
         }
         getLogger().info("Registered event listeners.");
+    }
+    
+    /**
+     * Dynamically registers event listeners for Vampire plugin events.
+     * Uses reflection to register handlers for Vampire event classes.
+     */
+    private void registerVampireEventListeners() {
+        try {
+            org.bukkit.plugin.Plugin vampirePlugin = getServer().getPluginManager().getPlugin("Vampire");
+            if (vampirePlugin == null) {
+                return;
+            }
+            
+            ClassLoader vampireClassLoader = vampirePlugin.getClass().getClassLoader();
+            org.clockworx.werewolf.listeners.VampireListener listener = 
+                new org.clockworx.werewolf.listeners.VampireListener(this);
+            
+            // Register handler for EventVampirePlayerVampireChange
+            try {
+                Class<?> vampireChangeEventClass = Class.forName(
+                    "org.clockworx.vampire.event.EventVampirePlayerVampireChange", 
+                    false, 
+                    vampireClassLoader
+                );
+                if (Event.class.isAssignableFrom(vampireChangeEventClass)) {
+                    @SuppressWarnings("unchecked")
+                    Class<? extends Event> eventClass = (Class<? extends Event>) vampireChangeEventClass;
+                    getServer().getPluginManager().registerEvent(
+                        eventClass,
+                        new org.bukkit.event.Listener() {},
+                        EventPriority.HIGH,
+                        (eventExecutor, event) -> listener.onEvent(event),
+                        this,
+                        true
+                    );
+                    getLogger().info("Registered handler for EventVampirePlayerVampireChange");
+                }
+            } catch (ClassNotFoundException e) {
+                getLogger().warning("Could not find EventVampirePlayerVampireChange class: " + e.getMessage());
+            }
+            
+            // Register handler for EventVampirePlayerInfectionChange
+            try {
+                Class<?> infectionChangeEventClass = Class.forName(
+                    "org.clockworx.vampire.event.EventVampirePlayerInfectionChange", 
+                    false, 
+                    vampireClassLoader
+                );
+                if (Event.class.isAssignableFrom(infectionChangeEventClass)) {
+                    @SuppressWarnings("unchecked")
+                    Class<? extends Event> eventClass = (Class<? extends Event>) infectionChangeEventClass;
+                    getServer().getPluginManager().registerEvent(
+                        eventClass,
+                        new org.bukkit.event.Listener() {},
+                        EventPriority.HIGH,
+                        (eventExecutor, event) -> listener.onEvent(event),
+                        this,
+                        true
+                    );
+                    getLogger().info("Registered handler for EventVampirePlayerInfectionChange");
+                }
+            } catch (ClassNotFoundException e) {
+                getLogger().warning("Could not find EventVampirePlayerInfectionChange class: " + e.getMessage());
+            }
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to register Vampire event listeners", e);
+        }
     }
 
     /**

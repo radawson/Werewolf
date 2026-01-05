@@ -4,18 +4,17 @@ import java.lang.reflect.Method;
 import java.util.UUID;
 
 import org.bukkit.event.Event;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.clockworx.werewolf.WerewolfPlugin;
 
 /**
  * Listener for Vampire plugin events (if available).
  * Handles cross-plugin integration to prevent conflicts.
  * 
- * Uses reflection to safely access Vampire event classes since they're in a different plugin.
+ * Uses dynamic event registration since we cannot directly
+ * import Vampire's event classes. This listener is registered dynamically
+ * in WerewolfPlugin after detecting the Vampire plugin.
  */
-public class VampireListener implements Listener {
+public class VampireListener {
     
     private final WerewolfPlugin plugin;
     
@@ -29,22 +28,34 @@ public class VampireListener implements Listener {
     }
     
     /**
-     * Handles vampire transformation events using reflection.
-     * Prevents werewolf players from becoming vampires.
-     * 
-     * This handler listens for EventVampirePlayerVampireChange events from the Vampire plugin.
-     *
-     * @param event The Bukkit event (will be checked via reflection if it's a Vampire event).
+     * Event executor that handles all events and filters for Vampire events.
+     * This is registered dynamically for specific event types.
      */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onVampirePlayerVampireChange(Event event) {
-        // Use reflection to check if this is a Vampire event
+    public void onEvent(Event event) {
+        // Early return if not a Vampire event
         String eventClassName = event.getClass().getName();
-        if (!eventClassName.contains("EventVampirePlayerVampireChange") || 
-            !eventClassName.contains("vampire")) {
-            return; // Not a Vampire event, ignore
+        if (!eventClassName.contains("vampire") || !eventClassName.contains("Event")) {
+            return;
         }
         
+        // Handle EventVampirePlayerVampireChange
+        if (eventClassName.contains("EventVampirePlayerVampireChange")) {
+            handleVampireChange(event);
+            return;
+        }
+        
+        // Handle EventVampirePlayerInfectionChange
+        if (eventClassName.contains("EventVampirePlayerInfectionChange")) {
+            handleInfectionChange(event);
+            return;
+        }
+    }
+    
+    /**
+     * Handles vampire transformation events using reflection.
+     * Prevents werewolf players from becoming vampires.
+     */
+    private void handleVampireChange(org.bukkit.event.Event event) {
         try {
             // Get the VampirePlayer from the event using reflection
             Method getVampirePlayerMethod = event.getClass().getMethod("getVampirePlayer");
@@ -74,27 +85,15 @@ public class VampireListener implements Listener {
                 }
             }
         } catch (Exception e) {
-            plugin.debug("Error handling vampire event: " + e.getMessage());
+            plugin.debug("Error handling vampire transformation event: " + e.getMessage());
         }
     }
     
     /**
      * Handles vampire infection change events using reflection.
      * Prevents werewolf players from being infected.
-     * 
-     * This handler listens for EventVampirePlayerInfectionChange events from the Vampire plugin.
-     *
-     * @param event The Bukkit event (will be checked via reflection if it's a Vampire event).
      */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onVampirePlayerInfectionChange(Event event) {
-        // Use reflection to check if this is a Vampire infection event
-        String eventClassName = event.getClass().getName();
-        if (!eventClassName.contains("EventVampirePlayerInfectionChange") || 
-            !eventClassName.contains("vampire")) {
-            return; // Not a Vampire event, ignore
-        }
-        
+    private void handleInfectionChange(org.bukkit.event.Event event) {
         try {
             // Get the VampirePlayer from the event using reflection
             Method getVampirePlayerMethod = event.getClass().getMethod("getVampirePlayer");
