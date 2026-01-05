@@ -252,8 +252,10 @@ public final class WerewolfPlugin extends JavaPlugin {
 
     /**
      * Check for Vampire plugin and initialize integration if available.
+     * This method can be called from event listeners to re-check integration
+     * when Vampire loads after Werewolf.
      */
-    private void checkVampirePlugin() {
+    public void checkVampirePlugin() {
         org.bukkit.plugin.Plugin vampirePlugin = getServer().getPluginManager().getPlugin("Vampire");
         if (vampirePlugin != null && vampirePlugin.isEnabled()) {
             getLogger().info("Vampire plugin detected. Initializing integration...");
@@ -342,6 +344,8 @@ public final class WerewolfPlugin extends JavaPlugin {
     private void registerListeners() {
         getServer().getPluginManager().registerEvents(
             new org.clockworx.werewolf.listeners.PlayerListener(this), this);
+        getServer().getPluginManager().registerEvents(
+            new org.clockworx.werewolf.listeners.IntegrationListener(this), this);
         if (vampireIntegration != null) {
             getServer().getPluginManager().registerEvents(
                 new org.clockworx.werewolf.listeners.VampireListener(this), this);

@@ -1,5 +1,9 @@
 package org.clockworx.werewolf.listeners;
 
+import java.lang.reflect.Method;
+import java.util.UUID;
+
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -9,9 +13,7 @@ import org.clockworx.werewolf.WerewolfPlugin;
  * Listener for Vampire plugin events (if available).
  * Handles cross-plugin integration to prevent conflicts.
  * 
- * Note: This listener only works if Vampire plugin exposes events
- * and is loaded. The actual event classes would need to be
- * accessed via reflection or a shared API.
+ * Uses reflection to safely access Vampire event classes since they're in a different plugin.
  */
 public class VampireListener implements Listener {
     
@@ -27,41 +29,102 @@ public class VampireListener implements Listener {
     }
     
     /**
-     * Handles vampire transformation events (if Vampire plugin exposes them).
+     * Handles vampire transformation events using reflection.
      * Prevents werewolf players from becoming vampires.
      * 
-     * Note: This is a placeholder. The actual event class would need to be
-     * accessed via reflection or a shared API contract.
+     * This handler listens for EventVampirePlayerVampireChange events from the Vampire plugin.
      *
-     * @param event The vampire transformation event (would be accessed via reflection).
+     * @param event The Bukkit event (will be checked via reflection if it's a Vampire event).
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onVampireTransform(Object event) {
-        // This is a placeholder implementation
-        // In a full implementation, you would:
-        // 1. Check if the event is a Vampire transformation event (via reflection)
-        // 2. Get the player from the event
-        // 3. Check if the player is a werewolf
-        // 4. Cancel the event if they are
+    public void onVampirePlayerVampireChange(Event event) {
+        // Use reflection to check if this is a Vampire event
+        String eventClassName = event.getClass().getName();
+        if (!eventClassName.contains("EventVampirePlayerVampireChange") || 
+            !eventClassName.contains("vampire")) {
+            return; // Not a Vampire event, ignore
+        }
         
         try {
-            // Example reflection-based access (commented out as it requires actual Vampire event classes):
-            /*
-            if (event.getClass().getName().contains("Vampire") && 
-                event.getClass().getName().contains("Transform")) {
-                
-                Method getPlayerMethod = event.getClass().getMethod("getPlayer");
-                Player player = (Player) getPlayerMethod.invoke(event);
-                
-                if (player != null && plugin.getWerewolfManager().isWerewolf(player.getUniqueId())) {
-                    Method setCancelledMethod = event.getClass().getMethod("setCancelled", boolean.class);
-                    setCancelledMethod.invoke(event, true);
-                    plugin.getLogger().info("Prevented vampire transformation for werewolf player: " + player.getName());
+            // Get the VampirePlayer from the event using reflection
+            Method getVampirePlayerMethod = event.getClass().getMethod("getVampirePlayer");
+            Object vampirePlayerObj = getVampirePlayerMethod.invoke(event);
+            
+            if (vampirePlayerObj == null) {
+                return;
+            }
+            
+            // Get the player UUID from VampirePlayer
+            Method getUuidMethod = vampirePlayerObj.getClass().getMethod("getUuid");
+            UUID playerUuid = (UUID) getUuidMethod.invoke(vampirePlayerObj);
+            
+            // Get the isVampire boolean to check if they're becoming a vampire
+            Method isVampireMethod = event.getClass().getMethod("isVampire");
+            Boolean isBecomingVampire = (Boolean) isVampireMethod.invoke(event);
+            
+            // Only prevent if they're becoming a vampire (not if they're being cured)
+            if (isBecomingVampire != null && isBecomingVampire && playerUuid != null) {
+                // Check if the player is a werewolf
+                if (plugin.getWerewolfManager().isWerewolf(playerUuid)) {
+                    // Cancel the event to prevent werewolf from becoming vampire
+                    if (event instanceof org.bukkit.event.Cancellable) {
+                        ((org.bukkit.event.Cancellable) event).setCancelled(true);
+                        plugin.getLogger().info("Prevented vampire transformation for werewolf player: " + playerUuid);
+                    }
                 }
             }
-            */
         } catch (Exception e) {
             plugin.debug("Error handling vampire event: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handles vampire infection change events using reflection.
+     * Prevents werewolf players from being infected.
+     * 
+     * This handler listens for EventVampirePlayerInfectionChange events from the Vampire plugin.
+     *
+     * @param event The Bukkit event (will be checked via reflection if it's a Vampire event).
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onVampirePlayerInfectionChange(Event event) {
+        // Use reflection to check if this is a Vampire infection event
+        String eventClassName = event.getClass().getName();
+        if (!eventClassName.contains("EventVampirePlayerInfectionChange") || 
+            !eventClassName.contains("vampire")) {
+            return; // Not a Vampire event, ignore
+        }
+        
+        try {
+            // Get the VampirePlayer from the event using reflection
+            Method getVampirePlayerMethod = event.getClass().getMethod("getVampirePlayer");
+            Object vampirePlayerObj = getVampirePlayerMethod.invoke(event);
+            
+            if (vampirePlayerObj == null) {
+                return;
+            }
+            
+            // Get the player UUID from VampirePlayer
+            Method getUuidMethod = vampirePlayerObj.getClass().getMethod("getUuid");
+            UUID playerUuid = (UUID) getUuidMethod.invoke(vampirePlayerObj);
+            
+            // Get the infection level
+            Method getInfectionMethod = event.getClass().getMethod("getInfection");
+            Double infectionLevel = (Double) getInfectionMethod.invoke(event);
+            
+            // Only prevent if infection is increasing (becoming infected, not being cured)
+            if (infectionLevel != null && infectionLevel > 0.0 && playerUuid != null) {
+                // Check if the player is a werewolf
+                if (plugin.getWerewolfManager().isWerewolf(playerUuid)) {
+                    // Cancel the event to prevent werewolf from being infected
+                    if (event instanceof org.bukkit.event.Cancellable) {
+                        ((org.bukkit.event.Cancellable) event).setCancelled(true);
+                        plugin.getLogger().info("Prevented vampire infection for werewolf player: " + playerUuid);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            plugin.debug("Error handling vampire infection event: " + e.getMessage());
         }
     }
 }
