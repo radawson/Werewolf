@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -133,7 +134,11 @@ public class SkinManager {
                 
                 // Apply the updated profile
                 player.setPlayerProfile(profile);
-                
+
+                // setPlayerProfile updates the profile data but does not re-render the skin
+                // for online viewers; force a refresh so the transformation is actually visible.
+                refreshPlayerSkin(player);
+
                 // Apply resource pack if configured
                 applyResourcePack(player);
                 
@@ -179,7 +184,8 @@ public class SkinManager {
             
             // Apply the updated profile
             player.setPlayerProfile(profile);
-            
+            refreshPlayerSkin(player);
+
             plugin.getLogger().info("Restored original skin for player: " + player.getName());
             return true;
         } catch (Exception e) {
@@ -217,6 +223,33 @@ public class SkinManager {
         return werewolfSkins.size();
     }
     
+    /**
+     * Forces online viewers to re-fetch the player's profile so a changed skin renders.
+     * {@code setPlayerProfile} updates the profile data but does not re-render the skin for
+     * clients already tracking the player; hiding then re-showing them triggers a fresh
+     * player-info + entity spawn. (A player's own first-person view of their skin only
+     * refreshes on respawn/relog.)
+     *
+     * @param player The player whose skin just changed.
+     */
+    private void refreshPlayerSkin(Player player) {
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.equals(player)) {
+                viewer.hidePlayer(plugin, player);
+            }
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                if (!viewer.equals(player)) {
+                    viewer.showPlayer(plugin, player);
+                }
+            }
+        }, 2L);
+    }
+
     /**
      * Applies the resource pack to a player if configured.
      *
