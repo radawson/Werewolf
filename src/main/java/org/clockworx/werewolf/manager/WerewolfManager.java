@@ -208,7 +208,12 @@ public class WerewolfManager {
         
         // Set transformation state
         werewolfPlayer.setTransformationState(WerewolfPlayer.TransformationState.WEREWOLF);
-        
+
+        // Play the transformation sound from the resource pack (no-op if the pack has no
+        // transform.ogg / the player didn't accept the pack).
+        player.getWorld().playSound(player.getLocation(), "werewolf:transform",
+            org.bukkit.SoundCategory.PLAYERS, 1.0f, 1.0f);
+
         plugin.debug("Applied transformation to player: " + player.getName());
     }
     

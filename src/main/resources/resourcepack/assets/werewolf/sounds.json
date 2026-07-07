@@ -1,0 +1,14 @@
+{
+    "transform": {
+        "category": "player",
+        "sounds": [
+            { "name": "werewolf:transform", "stream": false }
+        ]
+    },
+    "howl": {
+        "category": "player",
+        "sounds": [
+            { "name": "werewolf:howl", "stream": false }
+        ]
+    }
+}
