@@ -89,18 +89,23 @@ public class WerewolfCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         
-        boolean success = plugin.getWerewolfManager().setWerewolfStatus(
-            target.getUniqueId(), true, "Command: " + sender.getName());
-        
-        if (success) {
-            sender.sendMessage("§aTransformed " + target.getName() + " into a werewolf.");
+        // Transform is a FORM toggle: human <-> wolf. Use /werewolf cure to clear werewolf status.
+        Boolean nowWolf = plugin.getWerewolfManager().toggleForm(target.getUniqueId());
+
+        if (nowWolf == null) {
+            sender.sendMessage("§cFailed to transform " + target.getName() + ".");
+        } else if (nowWolf) {
+            sender.sendMessage("§aTransformed " + target.getName() + " into werewolf form.");
             if (!target.equals(sender)) {
-                target.sendMessage("§aYou have been transformed into a werewolf!");
+                target.sendMessage("§aYou transform into a werewolf!");
             }
         } else {
-            sender.sendMessage("§cFailed to transform " + target.getName() + ".");
+            sender.sendMessage("§a" + target.getName() + " reverted to human form.");
+            if (!target.equals(sender)) {
+                target.sendMessage("§aYou revert to human form.");
+            }
         }
-        
+
         return true;
     }
     

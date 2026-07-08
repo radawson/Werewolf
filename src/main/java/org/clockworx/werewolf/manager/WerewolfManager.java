@@ -236,8 +236,47 @@ public class WerewolfManager {
         
         // Set transformation state
         werewolfPlayer.setTransformationState(WerewolfPlayer.TransformationState.HUMAN);
-        
+
         plugin.debug("Removed transformation from player: " + player.getName());
+    }
+
+    /**
+     * Toggles a player's werewolf FORM (human &lt;-&gt; wolf) without curing them. Shifting into
+     * wolf form marks them a werewolf if they weren't already (so an admin/OP can transform on
+     * demand); shifting back to human form leaves their werewolf status intact. To clear werewolf
+     * status entirely use {@link #setWerewolfStatus(UUID, boolean, String)} with {@code false}
+     * (the cure command), which also reverts the form.
+     *
+     * @param uuid the player's UUID
+     * @return {@code TRUE} if now in wolf form, {@code FALSE} if now in human form, or
+     *         {@code null} if the toggle couldn't run (player offline / invalid)
+     */
+    public Boolean toggleForm(UUID uuid) {
+        WerewolfPlayer wp = getOrCreateWerewolfPlayer(uuid);
+        if (wp == null) {
+            return null;
+        }
+        Player player = wp.getPlayer();
+        if (player == null || !player.isOnline()) {
+            return null;
+        }
+
+        boolean toWolf = wp.getTransformationState() != WerewolfPlayer.TransformationState.WEREWOLF;
+        if (toWolf) {
+            if (!wp.isWerewolf()) {
+                wp.setWerewolfInternal(true);
+            }
+            wp.setLastTransformationTime(System.currentTimeMillis());
+            applyTransformation(player, wp);
+            Bukkit.getPluginManager().callEvent(new WerewolfTransformationEvent(player, wp, "Toggle"));
+        } else {
+            // Shift back to human form but remain a werewolf.
+            removeTransformation(player, wp);
+        }
+
+        saveOrUpdateWerewolfPlayer(wp);
+        plugin.debug("Toggled form for " + wp.getName() + " -> " + (toWolf ? "WEREWOLF" : "HUMAN"));
+        return toWolf;
     }
     
     /**
