@@ -8,22 +8,29 @@ import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 import org.bukkit.plugin.IllegalPluginAccessException;
+import org.clockworx.data.hibernate.HibernateSessionManager;
 import org.clockworx.werewolf.WerewolfPlugin;
 import org.clockworx.werewolf.entity.WerewolfPlayer;
 import org.clockworx.werewolf.entity.WerewolfPlayerEntity;
-import org.hibernate.Session;
-import org.hibernate.Transaction;
 import org.hibernate.query.Query;
 
 /**
  * Hibernate-based implementation of database operations for werewolf players.
  * Handles all database operations using Hibernate ORM.
+ *
+ * <p>Session/transaction infrastructure is provided by the shared clockworx-data
+ * library ({@link HibernateSessionManager}), which owns the lazily initialized
+ * SessionFactory and provides async transaction helpers with the shutdown guards
+ * originally implemented here (short-circuiting during shutdown and tolerating
+ * classloader-teardown errors). This class contributes the Werewolf-specific
+ * entity, queries, and entity/domain conversions.</p>
  */
 public class HibernateDatabaseManager {
     
     private final WerewolfPlugin plugin;
-    private final Executor asyncExecutor;
-    private volatile boolean isShuttingDown = false;
+    
+    /** Shared session/transaction manager from the clockworx-data library. */
+    private final HibernateSessionManager sessions;
 
     /**
      * Creates a new HibernateDatabaseManager.
@@ -32,10 +39,11 @@ public class HibernateDatabaseManager {
      */
     public HibernateDatabaseManager(WerewolfPlugin plugin) {
         this.plugin = plugin;
-        // Use Paper's async scheduler for better integration with server task tracking
-        // If plugin is disabled or shutting down, execute synchronously to avoid IllegalPluginAccessException
-        this.asyncExecutor = task -> {
-            if (plugin.isEnabled() && !HibernateDatabaseManager.this.isShuttingDown) {
+        // Use Paper's async scheduler for better integration with server task tracking.
+        // If plugin is disabled or shutting down, execute synchronously to avoid
+        // IllegalPluginAccessException.
+        Executor asyncExecutor = task -> {
+            if (plugin.isEnabled() && !isShuttingDown()) {
                 try {
                     plugin.getServer().getScheduler().runTaskAsynchronously(plugin, task);
                 } catch (IllegalPluginAccessException e) {
@@ -47,6 +55,18 @@ public class HibernateDatabaseManager {
                 task.run();
             }
         };
+        this.sessions = new HibernateSessionManager(
+                plugin.getWerewolfConfig().getDatabaseSettings(),
+                List.of(WerewolfPlayerEntity.class),
+                asyncExecutor,
+                plugin.getLogger());
+    }
+
+    /**
+     * @return true once shutdown of the shared session manager has begun
+     */
+    private boolean isShuttingDown() {
+        return sessions != null && sessions.isShuttingDown();
     }
 
     /**
@@ -58,136 +78,13 @@ public class HibernateDatabaseManager {
     }
 
     /**
-     * Shuts down the database manager.
-     * The actual SessionFactory shutdown is handled centrally in WerewolfPlugin.onDisable.
+     * Shuts down the database manager: marks the shared session manager as
+     * shutting down (so in-flight operations short-circuit) and closes the
+     * SessionFactory and its connection pool.
      */
     public void shutdown() {
-        isShuttingDown = true;
-        plugin.getLogger().log(Level.INFO, "HibernateDatabaseManager shutdown called (actual SessionFactory shutdown managed elsewhere).");
-    }
-
-    /**
-     * Helper method to execute transactional code safely using Paper's async scheduler.
-     *
-     * @param <T> The return type of the transaction
-     * @param function The transaction function to execute
-     * @return A CompletableFuture that completes with the transaction result
-     */
-    private <T> CompletableFuture<T> executeTransaction(TransactionFunction<T> function) {
-        if (isShuttingDown) {
-            return CompletableFuture.completedFuture(null);
-        }
-        
-        return CompletableFuture.supplyAsync(() -> {
-            if (isShuttingDown) {
-                return null;
-            }
-            
-            Transaction tx = null;
-            try (Session session = HibernateConfig.getSessionFactory(plugin).openSession()) {
-                tx = session.beginTransaction();
-                T result = function.apply(session);
-                tx.commit();
-                return result;
-            } catch (IllegalStateException e) {
-                // Handle shutdown-related errors gracefully
-                if (e.getMessage() != null && (e.getMessage().contains("zip file closed") || 
-                                               e.getMessage().contains("classloader"))) {
-                    if (!isShuttingDown) {
-                        plugin.getLogger().log(Level.WARNING, "Database operation interrupted by classloader shutdown", e);
-                    }
-                    if (tx != null && tx.isActive()) {
-                        try {
-                            tx.rollback();
-                        } catch (Exception rbEx) {
-                            // Ignore rollback errors during shutdown
-                        }
-                    }
-                    return null;
-                }
-                // Re-throw unexpected IllegalStateException
-                throw e;
-            } catch (Exception e) {
-                if (tx != null && tx.isActive()) {
-                    try {
-                        tx.rollback();
-                    } catch (Exception rbEx) {
-                        plugin.getLogger().log(Level.SEVERE, "Transaction rollback failed", rbEx);
-                    }
-                }
-                if (!isShuttingDown) {
-                    plugin.getLogger().log(Level.SEVERE, "Database transaction failed", e);
-                }
-                throw new RuntimeException("Database transaction failed", e);
-            }
-        }, asyncExecutor);
-    }
-
-    // Helper functional interface for transactions
-    @FunctionalInterface
-    private interface TransactionFunction<T> {
-        T apply(Session session) throws Exception;
-    }
-
-    /**
-     * Simplified execute function for operations returning Void.
-     *
-     * @param function The void transaction function to execute
-     * @return A CompletableFuture that completes when the transaction is done
-     */
-    private CompletableFuture<Void> executeTransactionVoid(VoidTransactionFunction function) {
-        if (isShuttingDown) {
-            return CompletableFuture.completedFuture(null);
-        }
-        
-        return CompletableFuture.runAsync(() -> {
-            if (isShuttingDown) {
-                return;
-            }
-            
-            Transaction tx = null;
-            try (Session session = HibernateConfig.getSessionFactory(plugin).openSession()) {
-                tx = session.beginTransaction();
-                function.apply(session);
-                tx.commit();
-            } catch (IllegalStateException e) {
-                // Handle shutdown-related errors gracefully
-                if (e.getMessage() != null && (e.getMessage().contains("zip file closed") || 
-                                               e.getMessage().contains("classloader"))) {
-                    if (!isShuttingDown) {
-                        plugin.getLogger().log(Level.WARNING, "Database operation interrupted by classloader shutdown", e);
-                    }
-                    if (tx != null && tx.isActive()) {
-                        try {
-                            tx.rollback();
-                        } catch (Exception rbEx) {
-                            // Ignore rollback errors during shutdown
-                        }
-                    }
-                    return;
-                }
-                // Re-throw unexpected IllegalStateException
-                throw e;
-            } catch (Exception e) {
-                if (tx != null && tx.isActive()) {
-                    try {
-                        tx.rollback();
-                    } catch (Exception rbEx) {
-                        plugin.getLogger().log(Level.SEVERE, "Transaction rollback failed", rbEx);
-                    }
-                }
-                if (!isShuttingDown) {
-                    plugin.getLogger().log(Level.SEVERE, "Database transaction failed", e);
-                }
-                throw new RuntimeException("Database transaction failed", e);
-            }
-        }, asyncExecutor);
-    }
-
-    // Helper functional interface for void transactions
-    @FunctionalInterface
-    private interface VoidTransactionFunction {
-        void apply(Session session) throws Exception;
+        sessions.shutdown();
+        plugin.getLogger().log(Level.INFO, "HibernateDatabaseManager shut down.");
     }
 
     /**
@@ -197,35 +94,10 @@ public class HibernateDatabaseManager {
      * @return A CompletableFuture that completes with the player's werewolf data, or null if not found
      */
     public CompletableFuture<WerewolfPlayer> getPlayer(UUID uuid) {
-        if (isShuttingDown) {
-            return CompletableFuture.completedFuture(null);
-        }
-        
-        return CompletableFuture.supplyAsync(() -> {
-            if (isShuttingDown) {
-                return null;
-            }
-            
-            try (Session session = HibernateConfig.getSessionFactory(plugin).openSession()) {
-                WerewolfPlayerEntity entity = session.get(WerewolfPlayerEntity.class, uuid);
-                return entity != null ? convertToWerewolfPlayer(entity) : null;
-            } catch (IllegalStateException e) {
-                // Handle shutdown-related errors gracefully
-                if (e.getMessage() != null && (e.getMessage().contains("zip file closed") || 
-                                               e.getMessage().contains("classloader"))) {
-                    if (!isShuttingDown) {
-                        plugin.getLogger().log(Level.WARNING, "Database operation interrupted by classloader shutdown", e);
-                    }
-                    return null;
-                }
-                throw e;
-            } catch (Exception e) {
-                if (!isShuttingDown) {
-                    plugin.getLogger().log(Level.SEVERE, "Error getting player from database: " + uuid, e);
-                }
-                return null;
-            }
-        }, asyncExecutor);
+        return sessions.executeRead(session -> {
+            WerewolfPlayerEntity entity = session.get(WerewolfPlayerEntity.class, uuid);
+            return entity != null ? convertToWerewolfPlayer(entity) : null;
+        }, null);
     }
 
     /**
@@ -235,7 +107,7 @@ public class HibernateDatabaseManager {
      * @return A CompletableFuture that completes when the save is done
      */
     public CompletableFuture<Void> savePlayer(WerewolfPlayer player) {
-        return executeTransactionVoid(session -> {
+        return sessions.executeTransactionVoid(session -> {
             WerewolfPlayerEntity entity = session.get(WerewolfPlayerEntity.class, player.getUuid());
             if (entity == null) {
                 entity = convertToEntity(player);
@@ -254,7 +126,7 @@ public class HibernateDatabaseManager {
      * @return A CompletableFuture that completes when the deletion is done
      */
     public CompletableFuture<Void> deletePlayer(UUID uuid) {
-        return executeTransactionVoid(session -> {
+        return sessions.executeTransactionVoid(session -> {
             WerewolfPlayerEntity entity = session.get(WerewolfPlayerEntity.class, uuid);
             if (entity != null) {
                 session.remove(entity);
@@ -268,42 +140,17 @@ public class HibernateDatabaseManager {
      * @return A CompletableFuture that completes with a list of all werewolf players
      */
     public CompletableFuture<List<WerewolfPlayer>> getAllWerewolves() {
-        if (isShuttingDown) {
-            return CompletableFuture.completedFuture(List.of());
-        }
-        
-        return CompletableFuture.supplyAsync(() -> {
-            if (isShuttingDown) {
-                return List.of();
-            }
-            
-            try (Session session = HibernateConfig.getSessionFactory(plugin).openSession()) {
-                Query<WerewolfPlayerEntity> query = session.createQuery(
-                    "FROM WerewolfPlayerEntity WHERE isWerewolf = true", 
-                    WerewolfPlayerEntity.class
-                );
-                List<WerewolfPlayerEntity> entities = query.getResultList();
-                // Empty list is a valid result (no werewolves in database)
-                return entities.stream()
-                    .map(this::convertToWerewolfPlayer)
-                    .collect(Collectors.toList());
-            } catch (IllegalStateException e) {
-                // Handle shutdown-related errors gracefully
-                if (e.getMessage() != null && (e.getMessage().contains("zip file closed") || 
-                                               e.getMessage().contains("classloader"))) {
-                    if (!isShuttingDown) {
-                        plugin.getLogger().log(Level.WARNING, "Database operation interrupted by classloader shutdown", e);
-                    }
-                    return List.of();
-                }
-                throw e;
-            } catch (Exception e) {
-                if (!isShuttingDown) {
-                    plugin.getLogger().log(Level.SEVERE, "Error getting all werewolves from database", e);
-                }
-                return List.of();
-            }
-        }, asyncExecutor);
+        return sessions.executeRead(session -> {
+            Query<WerewolfPlayerEntity> query = session.createQuery(
+                "FROM WerewolfPlayerEntity WHERE isWerewolf = true", 
+                WerewolfPlayerEntity.class
+            );
+            List<WerewolfPlayerEntity> entities = query.getResultList();
+            // Empty list is a valid result (no werewolves in database)
+            return entities.stream()
+                .map(this::convertToWerewolfPlayer)
+                .collect(Collectors.toList());
+        }, List.of());
     }
     
     /**
@@ -312,41 +159,16 @@ public class HibernateDatabaseManager {
      * @return A CompletableFuture that completes with a list of all players
      */
     public CompletableFuture<List<WerewolfPlayer>> getAllPlayers() {
-        if (isShuttingDown) {
-            return CompletableFuture.completedFuture(List.of());
-        }
-        
-        return CompletableFuture.supplyAsync(() -> {
-            if (isShuttingDown) {
-                return List.of();
-            }
-            
-            try (Session session = HibernateConfig.getSessionFactory(plugin).openSession()) {
-                Query<WerewolfPlayerEntity> query = session.createQuery(
-                    "FROM WerewolfPlayerEntity", 
-                    WerewolfPlayerEntity.class
-                );
-                List<WerewolfPlayerEntity> entities = query.getResultList();
-                return entities.stream()
-                    .map(this::convertToWerewolfPlayer)
-                    .collect(Collectors.toList());
-            } catch (IllegalStateException e) {
-                // Handle shutdown-related errors gracefully
-                if (e.getMessage() != null && (e.getMessage().contains("zip file closed") || 
-                                               e.getMessage().contains("classloader"))) {
-                    if (!isShuttingDown) {
-                        plugin.getLogger().log(Level.WARNING, "Database operation interrupted by classloader shutdown", e);
-                    }
-                    return List.of();
-                }
-                throw e;
-            } catch (Exception e) {
-                if (!isShuttingDown) {
-                    plugin.getLogger().log(Level.SEVERE, "Error getting all players from database", e);
-                }
-                return List.of();
-            }
-        }, asyncExecutor);
+        return sessions.executeRead(session -> {
+            Query<WerewolfPlayerEntity> query = session.createQuery(
+                "FROM WerewolfPlayerEntity", 
+                WerewolfPlayerEntity.class
+            );
+            List<WerewolfPlayerEntity> entities = query.getResultList();
+            return entities.stream()
+                .map(this::convertToWerewolfPlayer)
+                .collect(Collectors.toList());
+        }, List.of());
     }
 
     /**
@@ -356,35 +178,10 @@ public class HibernateDatabaseManager {
      * @return A CompletableFuture that completes with true if the player is a werewolf, false otherwise
      */
     public CompletableFuture<Boolean> isWerewolf(UUID uuid) {
-        if (isShuttingDown) {
-            return CompletableFuture.completedFuture(false);
-        }
-        
-        return CompletableFuture.supplyAsync(() -> {
-            if (isShuttingDown) {
-                return false;
-            }
-            
-            try (Session session = HibernateConfig.getSessionFactory(plugin).openSession()) {
-                WerewolfPlayerEntity entity = session.get(WerewolfPlayerEntity.class, uuid);
-                return entity != null && entity.isWerewolf();
-            } catch (IllegalStateException e) {
-                // Handle shutdown-related errors gracefully
-                if (e.getMessage() != null && (e.getMessage().contains("zip file closed") || 
-                                               e.getMessage().contains("classloader"))) {
-                    if (!isShuttingDown) {
-                        plugin.getLogger().log(Level.WARNING, "Database operation interrupted by classloader shutdown", e);
-                    }
-                    return false;
-                }
-                throw e;
-            } catch (Exception e) {
-                if (!isShuttingDown) {
-                    plugin.getLogger().log(Level.SEVERE, "Error checking if player is werewolf: " + uuid, e);
-                }
-                return false;
-            }
-        }, asyncExecutor);
+        return sessions.executeRead(session -> {
+            WerewolfPlayerEntity entity = session.get(WerewolfPlayerEntity.class, uuid);
+            return entity != null && entity.isWerewolf();
+        }, false);
     }
 
     /**
@@ -448,4 +245,3 @@ public class HibernateDatabaseManager {
         entity.setLastCureTime(player.getLastCureTime());
     }
 }
-

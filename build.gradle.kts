@@ -18,27 +18,12 @@ repositories {
 dependencies {
     paperweight.paperDevBundle("26.1.2.build.74-stable")
     
-    // Database - Core
-    implementation("org.hibernate:hibernate-core:6.6.13.Final") 
-    implementation("org.hibernate:hibernate-community-dialects:6.6.13.Final")
-    implementation("org.flywaydb:flyway-core:11.7.2")
-    implementation("org.flywaydb:flyway-mysql:11.7.2")
-    implementation("mysql:mysql-connector-java:8.0.33")
-    implementation("org.xerial:sqlite-jdbc:3.49.1.0")
-    implementation("org.postgresql:postgresql:42.7.5")
-    
-    // Database - Connection Pools (Shade this)
-    implementation("com.zaxxer:HikariCP:6.3.0")
-    implementation("org.hibernate.orm:hibernate-hikaricp:6.6.13.Final")
+    // Shared Clockworx data layer (Hibernate + Flyway + HikariCP + JDBC drivers)
+    // Provided via composite build from ../clockworx-data (see settings.gradle.kts)
+    implementation("org.clockworx:clockworx-data:0.1.0-SNAPSHOT")
 
-    // Jakarta Persistence API
-    implementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
-    
-    // Logging - Make sure we use compatible versions
-    implementation("org.jboss.logging:jboss-logging:3.5.3.Final")
-    implementation("org.jboss.logging:jboss-logging-annotations:2.2.1.Final")
     // Use Logback for SLF4J implementation compatible with Paper
-    implementation("ch.qos.logback:logback-classic:1.5.6")
+    implementation("ch.qos.logback:logback-classic:1.5.37")
     
     // Lombok (for boilerplate code reduction)
     compileOnly("org.projectlombok:lombok:1.18.46")

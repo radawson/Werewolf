@@ -141,13 +141,9 @@ public final class WerewolfPlugin extends JavaPlugin {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        
-        // Shutdown Hibernate SessionFactory
-        try {
-            org.clockworx.werewolf.database.HibernateConfig.shutdown();
-        } catch (Exception e) {
-            getLogger().log(Level.SEVERE, "Error during HibernateConfig shutdown in onDisable", e);
-        }
+
+        // Note: the Hibernate SessionFactory is closed by databaseManager.shutdown()
+        // above, via the shared clockworx-data HibernateSessionManager.
 
         // Shutdown Resource Pack Server
         if (resourcePackServer != null) {
@@ -177,70 +173,21 @@ public final class WerewolfPlugin extends JavaPlugin {
     }
 
     /**
-     * Executes database migrations using Flyway.
+     * Executes database migrations using the shared clockworx-data FlywayMigrator.
+     * The migrator handles classloader swapping, JDBC driver loading, baseline
+     * configuration, the {@code ${tablePrefix}} placeholder, and the prefixed
+     * schema history table.
+     *
      * @return true if migrations were successful, false otherwise.
      */
     private boolean runDatabaseMigrations() {
-        getLogger().info("Starting database migration check...");
-        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
         try {
-            // Set context class loader for Flyway to find drivers/resources
-            Thread.currentThread().setContextClassLoader(getClassLoader());
-
-            // Get database details from loaded config
-            String dbType = config.getDatabaseType();
-            String dbUrl = config.getDatabaseUrl();
-            String dbUser = config.getDatabaseUser();
-            String dbPassword = config.getDatabasePassword();
-            String tablePrefix = config.getDatabaseTablePrefix();
-
-            // Load the appropriate JDBC driver explicitly
-            try {
-                if ("mysql".equalsIgnoreCase(dbType)) {
-                    Class.forName("com.mysql.cj.jdbc.Driver", true, getClassLoader());
-                } else if ("sqlite".equalsIgnoreCase(dbType)) {
-                    Class.forName("org.sqlite.JDBC", true, getClassLoader());
-                } else if ("postgres".equalsIgnoreCase(dbType) || "postgresql".equalsIgnoreCase(dbType)) {
-                    Class.forName("org.postgresql.Driver", true, getClassLoader());
-                }
-            } catch (ClassNotFoundException e) {
-                getLogger().log(Level.SEVERE, "Could not find JDBC driver for database type: " + dbType, e);
-                return false;
-            }
-
-            org.flywaydb.core.api.configuration.FluentConfiguration flywayConfig = 
-                org.flywaydb.core.Flyway.configure(getClassLoader())
-                    .dataSource(dbUrl, dbUser, dbPassword)
-                    .locations("classpath:db/migration")
-                    .encoding("UTF-8")
-                    .baselineOnMigrate(true)
-                    .baselineVersion("0")
-                    .placeholders(java.util.Map.of("tablePrefix", tablePrefix));
-
-            // Set the schema history table name with the prefix
-            String historyTableName = tablePrefix.isEmpty() 
-                ? "flyway_schema_history" 
-                : tablePrefix + "flyway_schema_history";
-            flywayConfig.table(historyTableName);
-            getLogger().info("Using Flyway history table: " + historyTableName);
-
-            org.flywaydb.core.Flyway flyway = flywayConfig.load();
-            flyway.migrate();
-
-            getLogger().info("Database migration check completed successfully.");
+            org.clockworx.data.flyway.FlywayMigrator.migrate(
+                    getClassLoader(), config.getDatabaseSettings(), getLogger());
             return true; // Success
-        } catch (org.flywaydb.core.api.FlywayException e) {
-            getLogger().log(Level.SEVERE, "Database migration failed!", e);
-            if (e.getCause() != null) {
-                getLogger().log(Level.SEVERE, "Cause: " + e.getCause().getMessage(), e.getCause());
-            }
-            return false; // Failure
         } catch (Exception e) {
-            getLogger().log(Level.SEVERE, "An unexpected error occurred during database migration setup!", e);
+            getLogger().log(Level.SEVERE, "An unexpected error occurred during database migration!", e);
             return false; // Failure
-        } finally {
-            // Restore original class loader
-            Thread.currentThread().setContextClassLoader(originalClassLoader);
         }
     }
 

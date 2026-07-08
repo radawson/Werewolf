@@ -221,6 +221,18 @@ public class WerewolfConfig {
     public String getDatabaseTablePrefix() {
         return databaseTablePrefix;
     }
+
+    /**
+     * Builds the shared-library connection settings from this configuration.
+     * Used by both Flyway migrations and the Hibernate session manager.
+     *
+     * @return the database settings for the clockworx-data layer
+     */
+    public org.clockworx.data.DatabaseSettings getDatabaseSettings() {
+        return org.clockworx.data.DatabaseSettings.withDefaults(
+                org.clockworx.data.DatabaseType.fromString(databaseType),
+                databaseUrl, databaseUser, databasePassword, databaseTablePrefix);
+    }
     
     public boolean isDebug() {
         return debug;
