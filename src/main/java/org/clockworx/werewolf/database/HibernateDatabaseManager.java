@@ -33,26 +33,29 @@ public class HibernateDatabaseManager {
     private final HibernateSessionManager sessions;
 
     /**
+     * Dedicated daemon pool for all DB work. NOT Bukkit's async scheduler: scheduler async tasks are
+     * only dispatched once the server ticks (after onEnable), so a DB future joined during enable would
+     * deadlock the main thread. A plain executor runs immediately at both enable- and run-time.
+     */
+    private final java.util.concurrent.ExecutorService dbPool =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread th = new Thread(r, "werewolf-db");
+                th.setDaemon(true);
+                return th;
+            });
+
+    /**
      * Creates a new HibernateDatabaseManager.
      *
      * @param plugin The main WerewolfPlugin instance
      */
     public HibernateDatabaseManager(WerewolfPlugin plugin) {
         this.plugin = plugin;
-        // Use Paper's async scheduler for better integration with server task tracking.
-        // If plugin is disabled or shutting down, execute synchronously to avoid
-        // IllegalPluginAccessException.
         Executor asyncExecutor = task -> {
-            if (plugin.isEnabled() && !isShuttingDown()) {
-                try {
-                    plugin.getServer().getScheduler().runTaskAsynchronously(plugin, task);
-                } catch (IllegalPluginAccessException e) {
-                    // Plugin was disabled between check and scheduling, execute synchronously
-                    task.run();
-                }
-            } else {
-                // During shutdown or when plugin is disabled, execute synchronously
-                task.run();
+            try {
+                dbPool.execute(task);
+            } catch (java.util.concurrent.RejectedExecutionException e) {
+                task.run(); // pool shut down during disable — run inline
             }
         };
         this.sessions = new HibernateSessionManager(
@@ -84,6 +87,7 @@ public class HibernateDatabaseManager {
      */
     public void shutdown() {
         sessions.shutdown();
+        dbPool.shutdown();
         plugin.getLogger().log(Level.INFO, "HibernateDatabaseManager shut down.");
     }
 

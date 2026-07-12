@@ -119,7 +119,7 @@ tasks {
     shadowJar {
         archiveClassifier.set("all")
         // Avoid "Could not add file to ZIP" on duplicate entries (JDK 25 / paperweight 26.x)
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
         // Add mappings namespace to shadowJar manifest as well
         manifest {
